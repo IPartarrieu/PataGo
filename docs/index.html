@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>PataGo</title>
+<meta name="description" content="Pasea a tu perro como en un juego: avatares en un mapa 3D, registro de paseos, rachas y medallas.">
+<meta name="theme-color" content="#ff7a59">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PataGo">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  :root {
+    --coral: #ff7a59; --coral2: #ff5a36; --teal: #2ec4b6; --navy: #13233f; --texto: #1d2a3f; --suave: #6b778c;
+    --carta: rgba(255,255,255,.96); --linea: #e7ebf2;
+    --abajo: env(safe-area-inset-bottom); --arriba: env(safe-area-inset-top);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #e9eef3; }
+  body { font-family: Nunito, system-ui, sans-serif; color: var(--texto); font-weight: 600; }
+  #map { position: absolute; inset: 0; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; touch-action: manipulation; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+
+  /* barra superior */
+  #top { position: absolute; top: calc(10px + var(--arriba)); left: 12px; right: 12px; display: flex; gap: 8px; pointer-events: none; }
+  .chip { pointer-events: auto; display: flex; align-items: center; gap: 8px; background: var(--carta); border-radius: 999px;
+          padding: 6px 14px 6px 6px; box-shadow: 0 4px 14px rgba(19,35,63,.18); font-weight: 800; font-size: 15px; }
+  .chip small { display: block; font-size: 11px; color: var(--suave); font-weight: 700; line-height: 1; }
+  #chipRacha { padding: 8px 14px; }
+  #btnCentrar { position: absolute; right: 12px; top: calc(64px + var(--arriba)); width: 48px; height: 48px; border-radius: 50%;
+                background: var(--carta); box-shadow: 0 4px 14px rgba(19,35,63,.2); font-size: 22px; display: none; }
+
+  /* HUD del paseo */
+  #hud { position: absolute; left: 12px; right: 12px; top: calc(64px + var(--arriba)); background: var(--navy); color: #fff; border-radius: 22px;
+         padding: 12px 16px; display: none; grid-template-columns: repeat(4, 1fr); gap: 6px; box-shadow: 0 8px 24px rgba(19,35,63,.35); }
+  #hud.on { display: grid; }
+  #hud div { text-align: center; }
+  #hud b { display: block; font-size: 22px; font-weight: 900; letter-spacing: -.02em; }
+  #hud span { font-size: 11px; opacity: .75; text-transform: uppercase; letter-spacing: .06em; }
+  #simVel { position: absolute; right: 10px; top: -12px; background: var(--teal); color: #fff; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 900; display: none; }
+  body.paseando #btnCentrar { top: calc(150px + var(--arriba)); }
+
+  /* barra inferior */
+  #barra { position: absolute; left: 10px; right: 10px; bottom: calc(10px + var(--abajo)); height: 74px; background: var(--carta); border-radius: 26px;
+           box-shadow: 0 8px 26px rgba(19,35,63,.22); display: grid; grid-template-columns: 1fr 1fr 96px 1fr 1fr; align-items: center; }
+  #barra button.nav { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 800; color: var(--suave); padding: 6px 0; }
+  #barra button.nav i { font-style: normal; font-size: 24px; line-height: 1; }
+  #barra button.nav.on { color: var(--coral2); }
+  #btnPasear { justify-self: center; width: 88px; height: 88px; margin-top: -34px; border-radius: 50%; background: linear-gradient(160deg, var(--coral), var(--coral2));
+               color: #fff; box-shadow: 0 10px 24px rgba(255,90,54,.45), 0 0 0 6px #fff; display: flex; flex-direction: column; align-items: center; justify-content: center;
+               font-weight: 900; font-size: 13px; letter-spacing: .02em; }
+  #btnPasear i { font-style: normal; font-size: 34px; line-height: 1; }
+  #btnPasear.paseando { background: linear-gradient(160deg, #3a4b6b, var(--navy)); box-shadow: 0 10px 24px rgba(19,35,63,.45), 0 0 0 6px #fff; }
+  #btnPasear.paseando i { animation: latido 1.2s ease-in-out infinite; }
+  @keyframes latido { 50% { transform: scale(1.15); } }
+
+  /* hoja deslizante */
+  #hoja { position: absolute; left: 0; right: 0; bottom: 0; max-height: 62vh; background: #fff; border-radius: 26px 26px 0 0; box-shadow: 0 -8px 30px rgba(19,35,63,.25);
+          transform: translateY(105%); transition: transform .28s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; z-index: 5; }
+  #hoja.on { transform: none; }
+  #hojaCab { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 6px; }
+  #hojaCab h2 { margin: 0; font-size: 22px; font-weight: 900; }
+  #hojaCerrar { width: 36px; height: 36px; border-radius: 50%; background: #f1f3f7; font-size: 16px; }
+  #hojaContenido { overflow-y: auto; padding: 4px 18px calc(18px + var(--abajo)); }
+  .seccion { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--suave); font-weight: 800; }
+  .pestanas { display: grid; grid-template-columns: 1fr 1fr; background: #f1f3f7; border-radius: 14px; padding: 4px; gap: 4px; }
+  .pestanas button { padding: 9px; border-radius: 10px; font-weight: 800; }
+  .pestanas button.on { background: #fff; box-shadow: 0 2px 8px rgba(19,35,63,.12); }
+  .muestras { display: flex; flex-wrap: wrap; gap: 10px; }
+  .muestra { width: 40px; height: 40px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(0,0,0,.08); }
+  .muestra.on { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--coral); }
+  .opcion { padding: 8px 14px; border-radius: 999px; background: #f1f3f7; font-weight: 800; font-size: 14px; }
+  .opcion.on { background: var(--coral); color: #fff; }
+  .opcion:disabled { opacity: .45; cursor: not-allowed; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat { background: #f6f8fb; border-radius: 16px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 24px; font-weight: 900; }
+  .stat span { font-size: 13px; color: var(--suave); }
+  .medallas { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .medalla { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: center; background: #f6f8fb; border-radius: 16px; padding: 10px; }
+  .medalla .ic { font-size: 28px; text-align: center; }
+  .medalla.no .ic { filter: grayscale(1); opacity: .45; }
+  .medalla h4 { margin: 0; font-size: 14px; font-weight: 900; }
+  .medalla p { margin: 1px 0 5px; font-size: 12px; color: var(--suave); line-height: 1.2; }
+  .barrita { height: 6px; background: #e3e8ef; border-radius: 9px; overflow: hidden; }
+  .barrita i { display: block; height: 100%; background: linear-gradient(90deg, var(--teal), #20a99c); border-radius: 9px; }
+  .lista button { width: 100%; display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 10px 4px; border-bottom: 1px solid var(--linea); }
+  .lista .ic { font-size: 26px; text-align: center; }
+  .lista b { display: block; font-weight: 900; }
+  .lista span { font-size: 13px; color: var(--suave); }
+  .lista em { font-style: normal; font-weight: 900; color: var(--coral2); white-space: nowrap; }
+  .vacio { color: var(--suave); text-align: center; padding: 24px 8px; }
+  .fila { display: flex; gap: 8px; flex-wrap: wrap; }
+  .boton { padding: 12px 18px; border-radius: 14px; background: var(--coral); color: #fff; font-weight: 900; }
+  .boton.sec { background: #f1f3f7; color: var(--texto); }
+
+  /* modal */
+  #modal { position: absolute; inset: 0; background: rgba(19,35,63,.45); display: none; align-items: center; justify-content: center; z-index: 10; padding: 20px; }
+  #modal.on { display: flex; }
+  #modalContenido { background: #fff; border-radius: 26px; padding: 24px; width: min(420px, 100%); max-height: 86vh; overflow-y: auto; text-align: center; }
+  #modalContenido h2 { margin: 6px 0 8px; font-size: 26px; font-weight: 900; }
+  #modalContenido p { color: var(--suave); margin: 0 0 14px; }
+  #modalContenido input { width: 100%; padding: 13px 14px; border-radius: 14px; border: 2px solid var(--linea); font: inherit; font-size: 17px; margin-bottom: 10px; }
+  .grande { font-size: 56px; line-height: 1; }
+  .premio { background: #fff6e8; border-radius: 16px; padding: 10px 12px; margin: 8px 0; text-align: left; font-weight: 800; }
+
+  #toast { position: absolute; left: 50%; bottom: calc(104px + var(--abajo)); transform: translate(-50%, 20px); background: var(--navy); color: #fff; padding: 12px 16px;
+           border-radius: 16px; font-weight: 800; opacity: 0; transition: .25s; pointer-events: none; width: max-content; max-width: calc(100% - 24px); z-index: 8; display: flex; gap: 10px; align-items: center; }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  #toast button { background: var(--teal); color: #fff; padding: 6px 10px; border-radius: 10px; font-weight: 900; white-space: nowrap; }
+
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: calc(92px + var(--abajo)); }
+  .maplibregl-popup-content { border-radius: 16px; padding: 12px 14px; font-family: Nunito, sans-serif; box-shadow: 0 6px 20px rgba(19,35,63,.25); }
+  .maplibregl-popup-content h3 { margin: 0 0 4px; font-size: 16px; font-weight: 900; }
+  .maplibregl-popup-content p { margin: 2px 0; color: var(--suave); font-size: 13px; }
+  .maplibregl-popup-content a { color: var(--coral2); font-weight: 800; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="map"></div>
+
+<header id="top">
+  <div class="chip" id="chipHoy" aria-label="Avance de hoy">
+    <svg width="38" height="38" viewBox="0 0 38 38" aria-hidden="true">
+      <circle cx="19" cy="19" r="15" fill="none" stroke="#e7ebf2" stroke-width="6"/>
+      <circle id="anillo" cx="19" cy="19" r="15" fill="none" stroke="#ff7a59" stroke-width="6" stroke-linecap="round" stroke-dasharray="94.25" stroke-dashoffset="94.25" transform="rotate(-90 19 19)"/>
+    </svg>
+    <div><span id="txtHoy">0 / 2 km</span><small>hoy</small></div>
+  </div>
+  <div class="chip" id="chipRacha" aria-label="Racha de días">🔥 <span id="txtRacha">0</span></div>
+</header>
+<button id="btnCentrar" aria-label="Centrar en mi ubicación">📍</button>
+
+<section id="hud" aria-live="polite">
+  <div><b id="hudTiempo">0:00</b><span>Tiempo</span></div>
+  <div><b id="hudKm">0,00</b><span>km</span></div>
+  <div><b id="hudPasos">0</b><span>Pasos</span></div>
+  <div><b id="hudRitmo">–</b><span>min/km</span></div>
+  <button id="simVel" aria-label="Velocidad de la simulación">×1</button>
+</section>
+
+<nav id="barra">
+  <button class="nav" data-hoja="avatar"><i>🎨</i>Avatar</button>
+  <button class="nav" data-hoja="cerca"><i>🌳</i>Cerca</button>
+  <button id="btnPasear" aria-label="Comenzar paseo"><i>🐾</i><span>PASEAR</span></button>
+  <button class="nav" data-hoja="logros"><i>🏅</i>Logros</button>
+  <button class="nav" data-hoja="historial"><i>📜</i>Paseos</button>
+</nav>
+
+<div id="hoja" role="dialog" aria-modal="false" aria-labelledby="hojaTitulo">
+  <div id="hojaCab"><h2 id="hojaTitulo"></h2><button id="hojaCerrar" aria-label="Cerrar">✕</button></div>
+  <div id="hojaContenido"></div>
+</div>
+
+<div id="modal" role="dialog" aria-modal="true"><div id="modalContenido"></div></div>
+<div id="toast" role="status"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

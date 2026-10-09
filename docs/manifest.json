@@ -1,0 +1,17 @@
+{
+  "name": "PataGo",
+  "short_name": "PataGo",
+  "description": "Pasea a tu perro como en un juego: avatares en un mapa 3D, registro de paseos, rachas y medallas.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ff7a59",
+  "theme_color": "#ff7a59",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
