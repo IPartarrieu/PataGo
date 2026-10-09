@@ -15,6 +15,8 @@ export class CapaAvatares {
     this.rumbo = 200;               // grados, 0 = norte
     this.rumboObjetivo = 200;
     this.fase = 0;
+    this.tamano = 1;               // multiplicador del tamaño en pantalla (más grande en el editor)
+    this.tamanoVisible = 1;
     this.mov = 0;
     this.t0 = performance.now();
     this.tPrev = this.t0;
@@ -37,7 +39,7 @@ export class CapaAvatares {
       m.position.set(x, 0.01, z);
       return m;
     };
-    this.grupo.add(sombra(0.32, 0, 0), sombra(0.36, 0.85, 0.45));
+    this.grupo.add(sombra(0.3, 0, 0), sombra(0.34, 0.8, 0.35));
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     if (this.pendiente) this.setModelos(...this.pendiente);
@@ -48,10 +50,12 @@ export class CapaAvatares {
     for (const m of [this.persona, this.perro, this.correa]) if (m) this.grupo.remove(m);
     this.persona = crearPersona(cfgPersona);
     this.perro = crearPerro(cfgPerro);
-    this.perro.position.set(0.85, 0, 0.45); // a un costado y un poco adelante
-    // correa: de la mano al cuello del perro
-    const e = this.perro.scale.x;
-    const curva = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0.3, 0.82, 0.05), new THREE.Vector3(0.6, 0.45, 0.3), new THREE.Vector3(0.85, 0.55 * e, 0.45 + 0.28 * e));
+    this.perro.position.set(0.8, 0, 0.35); // a un costado y un poco adelante
+    // correa: de la mano del paseador al cuello del perro (según la raza), con una caída al medio
+    const mano = this.persona.userData.mano, cuello = this.perro.userData.cuello.clone().add(this.perro.position);
+    const medio = mano.clone().lerp(cuello, 0.5);
+    medio.y = Math.min(mano.y, cuello.y) - 0.15;
+    const curva = new THREE.QuadraticBezierCurve3(mano, medio, cuello);
     this.correa = new THREE.Mesh(new THREE.TubeGeometry(curva, 16, 0.012, 6), new THREE.MeshStandardMaterial({ color: 0xe63946 }));
     this.grupo.add(this.persona, this.perro, this.correa);
     this.map?.triggerRepaint();
@@ -88,7 +92,8 @@ export class CapaAvatares {
 
     const merc = maplibregl.MercatorCoordinate.fromLngLat(this.pos, 0);
     const mpp = (40075016.686 * Math.cos((this.pos[1] * Math.PI) / 180)) / (512 * 2 ** this.map.getZoom());
-    const s = merc.meterInMercatorCoordinateUnits() * Math.max(1, (ALTO_PX * mpp) / ALTO_M);
+    this.tamanoVisible += (this.tamano - this.tamanoVisible) * (1 - Math.exp(-dtReal / 0.25));
+    const s = merc.meterInMercatorCoordinateUnits() * Math.max(1, (ALTO_PX * this.tamanoVisible * mpp) / ALTO_M);
     const l = new THREE.Matrix4().makeTranslation(merc.x, merc.y, merc.z)
       .scale(new THREE.Vector3(s, -s, s))
       .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));

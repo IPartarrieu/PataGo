@@ -69,8 +69,8 @@ export function accesoriosDesbloqueados(s) {
 const CLAVE = 'patago-v1';
 export const estadoInicial = () => ({
   perfil: null, // { nombre, perro } se completa en la bienvenida
-  persona: { piel: 1, pelo: 'corto', colorPelo: 0, polera: 0, pantalon: 0, accesorio: null },
-  perro: { pelaje: 0, manchas: false, orejas: 'caidas', tamano: 'mediano', accesorio: null },
+  persona: {}, // rasgos del paseador; los valores por defecto están en avatars.js (POR_DEFECTO)
+  perro: {},
   metaKm: 2,
   paseos: [],
 });

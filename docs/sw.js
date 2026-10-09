@@ -2,7 +2,7 @@
 // - Archivos propios: primero la red (para recibir actualizaciones) y, sin conexión, el caché.
 // - Librerías y fuentes (versiones fijas en CDN): primero el caché.
 // - Mosaicos del mapa: se guardan los que vas viendo (hasta MAX_MOSAICOS) para abrir el mapa sin señal.
-const APP = 'patago-app-v1', MAPA = 'patago-mapa-v1', MAX_MOSAICOS = 1500;
+const APP = 'patago-app-v2', MAPA = 'patago-mapa-v1', MAX_MOSAICOS = 1500;
 const PRECARGA = [
   './', 'index.html', 'manifest.json', 'data/lugares.geojson', 'icons/icon-180.png', 'icons/favicon-64.png',
   'js/main.js', 'js/scene.js', 'js/avatars.js', 'js/walk.js', 'js/progress.js',

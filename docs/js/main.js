@@ -1,12 +1,17 @@
 // PataGo — aplicación principal: mapa 3D, avatares, paseos, logros y lugares cercanos.
 import { CapaAvatares } from './scene.js';
-import { OPCIONES, ACCESORIOS } from './avatars.js';
+import { EDITOR, ACCESORIOS, POR_DEFECTO, aplicarRaza } from './avatars.js';
 import { Rastreador, distancia } from './walk.js';
 import { cargar, guardar, estadisticas, MEDALLAS, progresoMedalla, medallasLogradas, accesoriosDesbloqueados, ZANCADA_M } from './progress.js';
 
 const INICIO = [-73.050246, -36.827098]; // Plaza de la Independencia, Concepción
 const $ = id => document.getElementById(id);
 const estado = cargar();
+// Completa los rasgos con los valores por defecto y descarta los de versiones anteriores (otro tipo de dato)
+const sanear = (def, val = {}) => Object.fromEntries(Object.entries(def).map(([k, d]) =>
+  [k, val[k] !== undefined && (d === null || Array.isArray(d) === Array.isArray(val[k]) && typeof val[k] === typeof d) ? val[k] : d]));
+estado.persona = sanear(POR_DEFECTO.persona, estado.persona);
+estado.perro = sanear(POR_DEFECTO.perro, estado.perro);
 const nf = (x, d = 0) => x.toLocaleString('es-CL', { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtKm = m => nf(m / 1000, m < 10000 ? 2 : 1);
 const fmtDur = s => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = Math.floor(s % 60); return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`; };
@@ -38,7 +43,7 @@ function iconoEmoji(emoji, color) {
   c.width = c.height = s;
   const g = c.getContext('2d');
   g.beginPath(); g.arc(s / 2, s / 2, s / 2 - 4, 0, Math.PI * 2);
-  g.fillStyle = '#fff'; g.fill(); g.lineWidth = 6; g.strokeStyle = color; g.stroke();
+  g.fillStyle = '#1f2840'; g.fill(); g.lineWidth = 6; g.strokeStyle = color; g.stroke();
   g.font = '38px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
   g.textAlign = 'center'; g.textBaseline = 'middle';
   g.fillText(emoji, s / 2, s / 2 + 2);
@@ -49,6 +54,7 @@ const lineaVacia = (coords = []) => ({ type: 'Feature', properties: {}, geometry
 map.on('load', async () => {
   // fuera los íconos de comercios del mapa base: así destacan las áreas verdes y veterinarias
   for (const l of map.getStyle().layers) if (/^poi_/.test(l.id)) map.setLayoutProperty(l.id, 'visibility', 'none');
+  oscurecerMapa();
   for (const [k, t] of Object.entries(TIPOS)) map.addImage('ic-' + k, iconoEmoji(t.emoji, t.color), { pixelRatio: 2 });
   const datos = await fetch('data/lugares.geojson').then(r => r.json());
   lugares = datos.features;
@@ -66,7 +72,7 @@ map.on('load', async () => {
       'text-field': ['step', ['zoom'], '', 16, ['coalesce', ['get', 'nombre'], '']], 'text-font': ['Noto Sans Bold'], 'text-size': 12,
       'text-offset': [0, 1.6], 'text-anchor': 'top', 'text-optional': true,
     },
-    paint: { 'text-color': '#1d2a3f', 'text-halo-color': '#fff', 'text-halo-width': 1.6 },
+    paint: { 'text-color': '#f4f6fb', 'text-halo-color': '#161d2e', 'text-halo-width': 1.6 },
   });
   map.addLayer(capa);
   map.on('click', 'lugares', e => mostrarLugar(e.features[0]));
@@ -74,6 +80,28 @@ map.on('load', async () => {
   map.on('mouseleave', 'lugares', () => (map.getCanvas().style.cursor = ''));
   marcarListo();
 });
+
+// Tonos de atardecer sobre el estilo "liberty" (el único de OpenFreeMap con edificios 3D)
+function oscurecerMapa() {
+  const C = { fondo: '#263042', suelo: '#2b3548', verde: '#2c5541', agua: '#1d4466', edificio: '#4b5772', calle: '#55627c', principal: '#9a7650', borde: '#1b2230', texto: '#dfe6f1', halo: '#1b2230' };
+  for (const { id, type, paint } of map.getStyle().layers) {
+    const pon = (prop, valor) => { try { map.setPaintProperty(id, prop, valor); } catch { /* propiedad no aplica a esta capa */ } };
+    if (paint?.['fill-pattern']) { map.setLayoutProperty(id, 'visibility', 'none'); continue; } // texturas claras: se ven ruidosas en oscuro
+    if (/^label_(city|town|village|state|country)/.test(id)) map.setLayerZoomRange(id, 0, 14.5); // no tapar al avatar de cerca
+    if (type === 'background') pon('background-color', C.fondo);
+    else if (type === 'fill') pon('fill-color', /water/.test(id) ? C.agua : /park|grass|wood|forest|landcover|pitch|cemetery|golf|garden|meadow|scrub/.test(id) ? C.verde : /building/.test(id) ? C.edificio : C.suelo);
+    else if (type === 'fill-extrusion') { pon('fill-extrusion-color', C.edificio); pon('fill-extrusion-opacity', 0.92); }
+    else if (type === 'line') {
+      if (/water|river|stream|canal/.test(id)) pon('line-color', C.agua);
+      else if (/casing/.test(id)) pon('line-color', C.borde);
+      else if (/motorway|trunk|primary/.test(id)) pon('line-color', C.principal);
+      else if (/road|highway|street|bridge|tunnel|path|track|service|minor|secondary|tertiary|link/.test(id)) pon('line-color', C.calle);
+      else if (/boundary/.test(id)) pon('line-color', '#6c6488');
+      else if (/rail/.test(id)) pon('line-color', '#59627a');
+    } else if (type === 'symbol') { pon('text-color', C.texto); pon('text-halo-color', C.halo); }
+    else if (type === 'raster') pon('raster-opacity', 0.25);
+  }
+}
 
 // Si el usuario mueve el mapa con el dedo, se deja de seguir al avatar hasta tocar 📍
 map.on('dragstart', () => { siguiendo = false; $('btnCentrar').style.display = 'block'; });
@@ -217,47 +245,68 @@ async function abrirHoja(tipo) {
   document.querySelectorAll('#barra .nav').forEach(b => b.classList.toggle('on', b.dataset.hoja === tipo));
   ({ avatar: hojaAvatar, cerca: hojaCerca, logros: hojaLogros, historial: hojaHistorial })[tipo]();
   $('hoja').classList.add('on');
-  if (tipo === 'avatar' && posicion) map.easeTo({ center: posicion, zoom: 19.3, pitch: 55, padding: { bottom: innerHeight * 0.55 }, duration: 700 });
+  if (tipo === 'avatar') requestAnimationFrame(encuadrarEditor);
 }
+// En el editor el avatar se ve grande, con los pies justo sobre el panel y la cabeza bajo los indicadores
+function encuadrarEditor() {
+  if (!posicion) return;
+  const H = innerHeight, techo = 90, piso = H - $('hoja').offsetHeight - 85;
+  capa.tamano = Math.max(1, Math.min(2.6, (piso - techo) / 120));
+  const pad = piso > H / 2 ? { top: 2 * piso - H, bottom: 0 } : { top: 0, bottom: H - 2 * piso };
+  map.easeTo({ center: posicion, zoom: 19.3, pitch: 50, padding: pad, duration: 700 });
+}
+
 function cerrarHoja() {
-  if (hojaActual === 'avatar' && posicion) map.easeTo({ center: posicion, zoom: 17.4, pitch: 60, padding: { bottom: 0 }, duration: 700 });
-  else map.easeTo({ padding: { bottom: 0 }, duration: 300 });
+  const sinRelleno = { top: 0, bottom: 0, left: 0, right: 0 };
+  if (hojaActual === 'avatar' && posicion) map.easeTo({ center: posicion, zoom: 17.4, pitch: 60, padding: sinRelleno, duration: 700 });
+  else map.easeTo({ padding: sinRelleno, duration: 300 });
   hojaActual = null;
+  capa.tamano = 1;
   $('hoja').classList.remove('on');
   document.querySelectorAll('#barra .nav').forEach(b => b.classList.remove('on'));
 }
 const hoja = (titulo, html) => { $('hojaTitulo').textContent = titulo; $('hojaContenido').innerHTML = html; };
 
-// Avatar: personalización de la persona y del perro, con accesorios ganados
+// Avatar: catálogo por secciones (paseador: cuerpo, cara, pelo, ropa; perro: raza, pelaje) + accesorios ganados
 let pestanaAvatar = 'persona';
+const seccionAvatar = { persona: 'Cuerpo', perro: 'Raza' };
 function hojaAvatar() {
+  const quien = pestanaAvatar, cfg = estado[quien], secciones = EDITOR[quien], sec = seccionAvatar[quien];
   const ganados = accesoriosDesbloqueados(estadisticas(estado.paseos));
-  const quien = pestanaAvatar, cfg = estado[quien], O = OPCIONES[quien];
-  const colores = (k, titulo) => `<div class="seccion">${titulo}</div><div class="muestras">${O[k].map((c, i) =>
-    `<button class="muestra ${cfg[k] === i ? 'on' : ''}" style="background:${c}" data-k="${k}" data-v="${i}" aria-label="${titulo} ${i + 1}"></button>`).join('')}</div>`;
-  const opciones = (k, titulo, lista) => `<div class="seccion">${titulo}</div><div class="fila">${lista.map(([v, l]) =>
-    `<button class="opcion ${String(cfg[k]) === String(v) ? 'on' : ''}" data-k="${k}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const chip = (k, v, l, on, t, extra = '') => `<button class="opcion ${on ? 'on' : ''}" data-k="${k}" data-v="${esc(v)}" data-t="${t}" ${extra}>${l}</button>`;
+  const control = ([k, titulo, tipo, valores]) => {
+    let html;
+    if (tipo === 'color') html = `<div class="muestras">${valores.map(c => `<button class="muestra ${cfg[k] === c ? 'on' : ''}" style="background:${c}" data-k="${k}" data-v="${c}" data-t="color" aria-label="${titulo} ${c}"></button>`).join('')}</div>`;
+    else if (tipo === 'bool') html = `<div class="fila">${chip(k, 'false', 'No', !cfg[k], tipo)}${chip(k, 'true', 'Sí', cfg[k], tipo)}</div>`;
+    else if (tipo === 'multi') html = `<div class="fila">${valores.map(([v, l]) => chip(k, v, l, cfg[k].includes(v), tipo)).join('')}</div>`;
+    else html = `<div class="fila">${valores.map(([v, l]) => chip(k, v, l, cfg[k] === v, tipo)).join('')}</div>`;
+    return `<div class="seccion">${titulo}</div>${html}`;
+  };
   const medallaDe = acc => MEDALLAS.find(m => m.premio && m.premio[0] === quien && m.premio[1] === acc);
-  const accesorios = `<div class="seccion">Accesorios</div><div class="fila">
-    <button class="opcion ${!cfg.accesorio ? 'on' : ''}" data-k="accesorio" data-v="">Ninguno</button>
+  const accesorios = `<div class="seccion">Accesorios</div><div class="fila">${chip('accesorio', '', 'Ninguno', !cfg.accesorio, 'op')}
     ${Object.entries(ACCESORIOS[quien]).map(([v, l]) => {
       const libre = ganados[quien].has(v);
-      return `<button class="opcion ${cfg.accesorio === v ? 'on' : ''}" data-k="accesorio" data-v="${v}" ${libre ? '' : 'disabled'} title="${libre ? '' : `Se gana con la medalla «${medallaDe(v)?.nombre}»`}">${libre ? '' : '🔒 '}${l}</button>`;
-    }).join('')}</div>
-    <p style="font-size:13px;color:var(--suave)">Gana accesorios consiguiendo medallas en tus paseos.</p>`;
+      return chip('accesorio', v, (libre ? '' : '🔒 ') + l, cfg.accesorio === v, 'op', libre ? '' : `disabled title="Se gana con la medalla «${medallaDe(v)?.nombre}»"`);
+    }).join('')}</div><p style="font-size:13px;color:var(--suave)">Gana accesorios consiguiendo medallas en tus paseos.</p>`;
+  const contenido = sec === 'Accesorios' ? accesorios : (secciones.find(x => x[0] === sec) ?? secciones[0])[1].map(control).join('');
   hoja('Tu equipo', `
     <div class="pestanas"><button data-tab="persona" class="${quien === 'persona' ? 'on' : ''}">🧍 ${esc(estado.perfil?.nombre || 'Tú')}</button><button data-tab="perro" class="${quien === 'perro' ? 'on' : ''}">🐕 ${esc(nombrePerro())}</button></div>
-    ${quien === 'persona'
-      ? colores('piel', 'Piel') + opciones('pelo', 'Peinado', O.pelo) + colores('colorPelo', 'Color de pelo') + colores('polera', 'Polera') + colores('pantalon', 'Pantalón')
-      : colores('pelaje', 'Pelaje') + opciones('manchas', 'Manchas', [['false', 'Sin manchas'], ['true', 'Con manchas']]) + opciones('orejas', 'Orejas', O.orejas) + opciones('tamano', 'Tamaño', O.tamano)}
-    ${accesorios}`);
-  $('hojaContenido').querySelectorAll('[data-tab]').forEach(b => (b.onclick = () => { pestanaAvatar = b.dataset.tab; hojaAvatar(); }));
-  $('hojaContenido').querySelectorAll('[data-k]').forEach(b => (b.onclick = () => {
-    const k = b.dataset.k, v = b.dataset.v;
-    cfg[k] = k === 'manchas' ? v === 'true' : k === 'accesorio' ? v || null : typeof cfg[k] === 'number' ? +v : v;
+    <div class="subtabs">${[...secciones.map(x => x[0]), 'Accesorios'].map(n => `<button data-sec="${n}" class="${n === sec ? 'on' : ''}">${n}</button>`).join('')}</div>
+    ${contenido}`);
+  const raiz = $('hojaContenido');
+  raiz.querySelectorAll('[data-tab]').forEach(b => (b.onclick = () => { pestanaAvatar = b.dataset.tab; hojaAvatar(); encuadrarEditor(); }));
+  raiz.querySelectorAll('[data-sec]').forEach(b => (b.onclick = () => { seccionAvatar[quien] = b.dataset.sec; hojaAvatar(); encuadrarEditor(); }));
+  raiz.querySelectorAll('[data-k]').forEach(b => (b.onclick = () => {
+    const { k, v, t } = b.dataset;
+    if (k === 'raza') aplicarRaza(cfg, v);
+    else if (t === 'multi') cfg[k] = cfg[k].includes(v) ? cfg[k].filter(x => x !== v) : [...cfg[k], v];
+    else if (t === 'bool') cfg[k] = v === 'true';
+    else cfg[k] = k === 'accesorio' ? v || null : v;
     persistir();
     capa.setModelos(estado.persona, estado.perro);
+    const desplazamiento = raiz.scrollTop;
     hojaAvatar();
+    raiz.scrollTop = desplazamiento;
   }));
 }
 

@@ -8,8 +8,9 @@ Pasea a tu perro como en un juego: tu avatar y el de tu perro caminan por un **m
 
 ## Etapa 1 (esta versión): prototipo personal
 
-- **Mapa 3D** con edificios (MapLibre + OpenFreeMap / OpenStreetMap), sin claves ni costos.
-- **Avatares personalizables** (persona y perro) dibujados con three.js sobre el mapa, con animación de caminata.
+- **Mapa 3D** con edificios (MapLibre + OpenFreeMap / OpenStreetMap) en tonos oscuros, sin claves ni costos.
+- **Paseador personalizable:** género, tono de piel, ojos, cejas, nariz, boca, vello facial, pecas, 9 peinados y ropa por partes (6 prendas de arriba, 6 de abajo, 3 calzados) con colores.
+- **Perro personalizable:** 9 razas base (quiltro, labrador, golden, pastor alemán, pitbull, beagle, poodle, chihuahua, salchicha), contextura, color, manchas combinables (pecho blanco, patas blancas, cara blanca, máscara, lomo oscuro, manchas) y color de nariz.
 - **Registro de paseos** con GPS: distancia, tiempo, ritmo, pasos estimados y recorrido en el mapa.
 - **Meta diaria, rachas y 14 medallas**; 10 de ellas desbloquean accesorios (gorro, bandana, capa, corona…).
 - **Cerca de ti:** áreas verdes, veterinarias y tiendas de mascotas de Concepción, con enlace a Google Maps (horarios).
